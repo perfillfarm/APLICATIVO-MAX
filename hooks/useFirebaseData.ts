@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FirebaseService, DailyRecord, UserSettings } from '@/services/FirebaseService';
+import { SupabaseService } from '@/services/SupabaseService';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
+import { DailyRecord, UserSettings } from '@/types/database';
 import { Alert } from 'react-native';
 
 export const useFirebaseDailyRecords = () => {
@@ -20,70 +21,59 @@ export const useFirebaseDailyRecords = () => {
     setLoading(true);
     
     // Subscribe to real-time updates
-    const unsubscribe = FirebaseService.subscribeToDailyRecords(user.uid, (newRecords) => {
-      console.log(`🔥 [${user.uid}] Firebase records updated:`, newRecords.length);
+    const subscription = SupabaseService.subscribeToDailyRecords(user.id, (newRecords) => {
+      console.log(`🔥 [${user.id}] Supabase records updated:`, newRecords.length);
       setRecords(newRecords);
       setLoading(false);
       setError(null);
       setSyncStatus('synced');
       
-      // Force re-render of dependent components
       setTimeout(() => {
-        console.log(`✅ [${user.uid}] Records synced and propagated: ${newRecords.length} records`);
+        console.log(`✅ [${user.id}] Records synced and propagated: ${newRecords.length} records`);
       }, 100);
     });
 
-    return unsubscribe;
+    return () => subscription?.unsubscribe();
   }, [user]);
 
-  const createRecord = async (recordData: Omit<DailyRecord, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
+  const createRecord = async (recordData: Omit<DailyRecord, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     if (!user) throw new Error('No authenticated user');
     
     try {
       setSyncStatus('syncing');
-      console.log(`🔄 [${user.uid}] Creating record for date: ${recordData.date}`);
+      console.log(`🔄 [${user.id}] Creating record for date: ${recordData.date}`);
       
-      await FirebaseService.createDailyRecord({
+      await SupabaseService.createDailyRecord({
         ...recordData,
-        userId: user.uid,
+        user_id: user.id,
       });
       
-      console.log(`✅ [${user.uid}] Record created successfully for ${recordData.date}`);
+      console.log(`✅ [${user.id}] Record created successfully for ${recordData.date}`);
       setSyncStatus('synced');
       
-      // Aguardar Firebase processar e validar
-      console.log(`🔄 [${user.uid}] Waiting for Firebase to process...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Validate record was saved
-      const savedRecord = await FirebaseService.getDailyRecordByDate(user.uid, recordData.date);
+      const savedRecord = await SupabaseService.getDailyRecordByDate(user.id, recordData.date);
       if (savedRecord) {
-        console.log(`✅ [${user.uid}] Record validation successful for ${recordData.date}`);
-        console.log(`✅ [${user.uid}] Saved record details:`, {
-          id: savedRecord.id,
-          completed: savedRecord.completed,
-          drops: savedRecord.drops
-        });
+        console.log(`✅ [${user.id}] Record validation successful for ${recordData.date}`);
       } else {
-        console.warn(`⚠️ [${user.uid}] Record validation failed for ${recordData.date}`);
+        console.warn(`⚠️ [${user.id}] Record validation failed for ${recordData.date}`);
       }
     } catch (error) {
       setSyncStatus('error');
       console.error('Error creating record:', error);
-      console.error(`❌ [${user.uid}] Failed to create record for ${recordData.date}`);
       
-      // Tentar novamente após 2 segundos
       setTimeout(async () => {
         try {
           setSyncStatus('syncing');
-          await FirebaseService.createDailyRecord({
+          await SupabaseService.createDailyRecord({
             ...recordData,
-            userId: user.uid,
+            user_id: user.id,
           });
-          console.log(`✅ [${user.uid}] Record created on retry for ${recordData.date}`);
+          console.log(`✅ [${user.id}] Record created on retry for ${recordData.date}`);
           setSyncStatus('synced');
         } catch (retryError) {
-          console.error(`❌ [${user.uid}] Retry failed for ${recordData.date}:`, retryError);
+          console.error(`❌ [${user.id}] Retry failed for ${recordData.date}:`, retryError);
           setSyncStatus('error');
           Alert.alert(
             'Sync Error',
@@ -100,20 +90,17 @@ export const useFirebaseDailyRecords = () => {
   const updateRecord = async (recordId: string, updates: Partial<DailyRecord>) => {
     try {
       setSyncStatus('syncing');
-      console.log(`🔄 [${user?.uid}] Updating record: ${recordId}`);
+      console.log(`🔄 [${user?.id}] Updating record: ${recordId}`);
       
-      await FirebaseService.updateDailyRecord(recordId, updates);
+      await SupabaseService.updateDailyRecord(recordId, updates);
       
-      console.log(`✅ [${user?.uid}] Record updated successfully: ${recordId}`);
+      console.log(`✅ [${user?.id}] Record updated successfully: ${recordId}`);
       setSyncStatus('synced');
       
-      // Force immediate data refresh
-      console.log(`🔄 [${user?.uid}] Forcing data refresh after update...`);
       await new Promise(resolve => setTimeout(resolve, 1500));
     } catch (error) {
       setSyncStatus('error');
       console.error('Error updating record:', error);
-      console.error(`❌ [${user?.uid}] Failed to update record: ${recordId}`);
       throw error;
     }
   };
@@ -121,16 +108,15 @@ export const useFirebaseDailyRecords = () => {
   const deleteRecord = async (recordId: string) => {
     try {
       setSyncStatus('syncing');
-      console.log(`🔄 [${user?.uid}] Deleting record: ${recordId}`);
+      console.log(`🔄 [${user?.id}] Deleting record: ${recordId}`);
       
-      await FirebaseService.deleteDailyRecord(recordId);
+      await SupabaseService.deleteDailyRecord(recordId);
       
-      console.log(`✅ [${user?.uid}] Record deleted successfully: ${recordId}`);
+      console.log(`✅ [${user?.id}] Record deleted successfully: ${recordId}`);
       setSyncStatus('synced');
     } catch (error) {
       setSyncStatus('error');
       console.error('Error deleting record:', error);
-      console.error(`❌ [${user?.uid}] Failed to delete record: ${recordId}`);
       throw error;
     }
   };
@@ -139,48 +125,45 @@ export const useFirebaseDailyRecords = () => {
     if (!user) return null;
     
     try {
-      console.log(`🔍 [${user.uid}] Searching record for date: ${date}`);
+      console.log(`🔍 [${user.id}] Searching record for date: ${date}`);
       
-      // Primeiro tentar buscar nos records carregados
       const existingRecord = records.find(r => r.date === date);
       if (existingRecord) {
-        console.log(`✅ [${user.uid}] Record found locally for ${date}`);
+        console.log(`✅ [${user.id}] Record found locally for ${date}`);
         return existingRecord;
       }
       
-      // Se não encontrar, buscar no Firebase
-      const firebaseRecord = await FirebaseService.getDailyRecordByDate(user.uid, date);
-      if (firebaseRecord) {
-        console.log(`✅ [${user.uid}] Record found in Firebase for ${date}`);
+      const supabaseRecord = await SupabaseService.getDailyRecordByDate(user.id, date);
+      if (supabaseRecord) {
+        console.log(`✅ [${user.id}] Record found in Supabase for ${date}`);
       } else {
-        console.log(`ℹ️ [${user.uid}] No record found for ${date}`);
+        console.log(`ℹ️ [${user.id}] No record found for ${date}`);
       }
-      return firebaseRecord;
+      return supabaseRecord;
     } catch (error) {
       console.error('Error getting record by date:', error);
-      console.error(`❌ [${user.uid}] Failed to get record for ${date}`);
       return null;
     }
   };
 
   const validateRecordSaved = async (date: string) => {
     try {
-      // Aguardar um pouco para o Firebase processar
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const savedRecord = await FirebaseService.getDailyRecordByDate(user!.uid, date);
+      const savedRecord = await SupabaseService.getDailyRecordByDate(user!.id, date);
       if (savedRecord) {
-        console.log(`✅ [${user!.uid}] Record validation successful for ${date}`);
+        console.log(`✅ [${user!.id}] Record validation successful for ${date}`);
         return true;
       } else {
-        console.warn(`⚠️ [${user!.uid}] Record validation failed for ${date}`);
+        console.warn(`⚠️ [${user!.id}] Record validation failed for ${date}`);
         return false;
       }
     } catch (error) {
-      console.error(`❌ [${user!.uid}] Record validation error for ${date}:`, error);
+      console.error(`❌ [${user!.id}] Record validation error for ${date}:`, error);
       return false;
     }
   };
+
   return {
     records,
     loading,
@@ -197,15 +180,15 @@ export const useFirebaseDailyRecords = () => {
 export const useFirebaseSettings = () => {
   const { user } = useFirebaseAuth();
   const [settings, setSettings] = useState<UserSettings>({
-    userId: '',
+    user_id: '',
     notifications: true,
-    reminderTime: '09:00',
-    dailyGoal: 40,
-    weeklyGoal: 280,
+    reminder_time: '09:00',
+    daily_goal: 2,
+    weekly_goal: 14,
     theme: 'light',
     language: 'en',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -225,7 +208,7 @@ export const useFirebaseSettings = () => {
     
     try {
       setLoading(true);
-      const userSettings = await FirebaseService.getUserSettings(user.uid);
+      const userSettings = await SupabaseService.getUserSettings(user.id);
       if (userSettings) {
         setSettings(userSettings);
       }
@@ -242,7 +225,7 @@ export const useFirebaseSettings = () => {
     if (!user) throw new Error('No authenticated user');
     
     try {
-      await FirebaseService.updateUserSettings(user.uid, updates);
+      await SupabaseService.updateUserSettings(user.id, updates);
       setSettings(prev => ({ ...prev, ...updates }));
     } catch (error) {
       console.error('Error updating settings:', error);
@@ -264,9 +247,9 @@ export const useFirebaseStats = () => {
   const [stats, setStats] = useState({
     totalDays: 0,
     currentStreak: 0,
-    averageDrops: 0,
+    averageCapsules: 0,
     completionRate: 0,
-    totalDrops: 0,
+    totalCapsules: 0,
   });
 
   useEffect(() => {
@@ -276,8 +259,8 @@ export const useFirebaseStats = () => {
   const calculateStats = () => {
     const completedRecords = records.filter(r => r.completed);
     const totalDays = completedRecords.length;
-    const totalDrops = completedRecords.reduce((sum, r) => sum + r.drops, 0);
-    const averageDrops = totalDays > 0 ? totalDrops / totalDays : 0;
+    const totalCapsules = completedRecords.reduce((sum, r) => sum + r.capsules, 0);
+    const averageCapsules = totalDays > 0 ? totalCapsules / totalDays : 0;
 
     // Calculate current streak
     let currentStreak = 0;
@@ -311,16 +294,15 @@ export const useFirebaseStats = () => {
     setStats({
       totalDays,
       currentStreak,
-      averageDrops,
+      averageCapsules,
       completionRate,
-      totalDrops,
+      totalCapsules,
     });
   };
 
   return stats;
 };
 
-// Hook para calcular progresso mensal
 export const useMonthlyProgress = (records: DailyRecord[]) => {
   const [progress, setProgress] = useState({
     completionRate: 0,
@@ -333,7 +315,6 @@ export const useMonthlyProgress = (records: DailyRecord[]) => {
   }, [records]);
 
   const calculateMonthlyProgress = () => {
-    // Últimos 30 dias
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     

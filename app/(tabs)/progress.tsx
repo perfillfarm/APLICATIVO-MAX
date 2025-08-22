@@ -4,7 +4,8 @@ import { Target, TrendingUp, Award, Clock, Calendar, ChartBar as BarChart3, Chev
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useFirebaseRecords } from '@/contexts/FirebaseRecordsContext';
-import { FirebaseService } from '@/services/FirebaseService';
+import { SupabaseService } from '@/services/SupabaseService';
+import { DailyRecord } from '@/types/database';
 
 // Helper function to get translated month name
 const getTranslatedMonth = (date: Date, t: (key: string) => string): string => {
@@ -22,15 +23,6 @@ import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { Header } from '@/components/ui/Header';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-
-interface DailyRecord {
-  id?: string;
-  date: string;
-  capsules: number;
-  time: string;
-  notes?: string;
-  completed: boolean;
-}
 
 export default function ProgressScreen() {
   const { theme } = useTheme();
@@ -198,7 +190,7 @@ export default function ProgressScreen() {
               // Delete all records from Firebase
               for (const record of records) {
                 if (record.id) {
-                  await FirebaseService.deleteDailyRecord(record.id);
+                  await SupabaseService.deleteDailyRecord(record.id);
                 }
               }
               

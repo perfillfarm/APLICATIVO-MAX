@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { FirebaseService, UserSettings } from '@/services/FirebaseService';
+import { SupabaseService } from '@/services/SupabaseService';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
+import { UserSettings } from '@/types/database';
 
 interface FirebaseSettingsContextData {
   settings: UserSettings | null;
@@ -25,7 +26,7 @@ export const FirebaseSettingsProvider: React.FC<{ children: React.ReactNode }> =
       return;
     }
 
-    console.log(`⚙️ [SettingsContext] Loading settings for user ${user.uid}`);
+    console.log(`⚙️ [SettingsContext] Loading settings for user ${user.id}`);
     loadSettings();
   }, [user]);
 
@@ -34,9 +35,9 @@ export const FirebaseSettingsProvider: React.FC<{ children: React.ReactNode }> =
     
     try {
       setLoading(true);
-      console.log(`⚙️ [SettingsContext] Fetching settings from Firebase`);
+      console.log(`⚙️ [SettingsContext] Fetching settings from Supabase`);
       
-      const userSettings = await FirebaseService.getUserSettings(user.uid);
+      const userSettings = await SupabaseService.getUserSettings(user.id);
       setSettings(userSettings);
       setError(null);
       
@@ -55,7 +56,7 @@ export const FirebaseSettingsProvider: React.FC<{ children: React.ReactNode }> =
     try {
       console.log(`⚙️ [SettingsContext] Updating settings:`, updates);
       
-      await FirebaseService.updateUserSettings(user.uid, updates);
+      await SupabaseService.updateUserSettings(user.id, updates);
       setSettings(prev => prev ? { ...prev, ...updates } : null);
       
       console.log(`✅ [SettingsContext] Settings updated successfully`);

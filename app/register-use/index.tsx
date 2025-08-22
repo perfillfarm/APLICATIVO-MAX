@@ -70,7 +70,7 @@ export default function RegisterUseScreen() {
         return;
       }
       
-      console.log(`💊 [${user?.uid}] Saving record: ${capsulesNumber} capsules for ${today}`);
+      console.log(`💊 [${user?.id}] Saving record: ${capsulesNumber} capsules for ${today}`);
 
       // Verificar se já existe um registro para hoje
       const existingRecord = await getRecordByDate(today);
@@ -85,9 +85,9 @@ export default function RegisterUseScreen() {
 
       if (existingRecord?.id) {
         // Atualizar registro existente
-        console.log(`🔄 [${user?.uid}] Updating existing record: ${existingRecord.id}`);
+        console.log(`🔄 [${user?.id}] Updating existing record: ${existingRecord.id}`);
         await updateRecord(existingRecord.id, recordData);
-        console.log(`✅ [${user?.uid}] Record updated successfully`);
+        console.log(`✅ [${user?.id}] Record updated successfully`);
         Alert.alert(
           t('todayRecordUpdated'),
           t('recordUpdatedSuccess'),
@@ -101,9 +101,9 @@ export default function RegisterUseScreen() {
         );
       } else {
         // Criar novo registro
-        console.log(`🔄 [${user?.uid}] Creating new record for ${today}`);
+        console.log(`🔄 [${user?.id}] Creating new record for ${today}`);
         await createRecord(recordData);
-        console.log(`✅ [${user?.uid}] Record created successfully`);
+        console.log(`✅ [${user?.id}] Record created successfully`);
         Alert.alert(
           t('congratulations'),
           t('recordSavedSuccess'),
@@ -122,12 +122,12 @@ export default function RegisterUseScreen() {
         try {
           const savedRecord = await getRecordByDate(today);
           if (savedRecord && savedRecord.capsules === capsulesNumber) {
-            console.log(`✅ [${user?.uid}] Record validation successful - ${capsulesNumber} capsules saved`);
+            console.log(`✅ [${user?.id}] Record validation successful - ${capsulesNumber} capsules saved`);
           } else {
-            console.warn(`⚠️ [${user?.uid}] Record validation failed - expected ${capsulesNumber} capsules`);
+            console.warn(`⚠️ [${user?.id}] Record validation failed - expected ${capsulesNumber} capsules`);
           }
         } catch (error) {
-          console.error(`❌ [${user?.uid}] Record validation error:`, error);
+          console.error(`❌ [${user?.id}] Record validation error:`, error);
         }
       }
       )
@@ -144,7 +144,7 @@ export default function RegisterUseScreen() {
       );
     } catch (error) {
       console.error('Error saving record:', error);
-      console.error(`❌ [${user?.uid}] Failed to save record:`, error);
+      console.error(`❌ [${user?.id}] Failed to save record:`, error);
       Alert.alert(t('error'), t('couldNotSaveRecord') || 'Could not save record');
     } finally {
       setLoading(false);

@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { FirebaseService, DailyRecord } from '@/services/FirebaseService';
+import { SupabaseService } from '@/services/SupabaseService';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
+import { DailyRecord } from '@/types/database';
 
 interface FirebaseRecordsContextData {
   records: DailyRecord[];
   loading: boolean;
   error: string | null;
   syncStatus: 'synced' | 'syncing' | 'error';
-  createRecord: (recordData: Omit<DailyRecord, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  createRecord: (recordData: Omit<DailyRecord, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateRecord: (recordId: string, updates: Partial<DailyRecord>) => Promise<void>;
   deleteRecord: (recordId: string) => Promise<void>;
   getRecordByDate: (date: string) => Promise<DailyRecord | null>;
@@ -30,17 +31,12 @@ export const FirebaseRecordsProvider: React.FC<{ children: React.ReactNode }> = 
       return;
     }
 
-    console.log(`🔥 [RecordsContext] Setting up listener for user ${user.uid}`);
+    console.log(`🔥 [RecordsContext] Setting up listener for user ${user.id}`);
     setLoading(true);
     
     // Subscribe to real-time updates
-    const unsubscribe = FirebaseService.subscribeToDailyRecords(user.uid, (newRecords) => {
+    const subscription = SupabaseService.subscribeToDailyRecords(user.id, (newRecords) => {
       console.log(`📊 [RecordsContext] Records updated: ${newRecords.length} records`);
-      console.log(`📊 [RecordsContext] Records date range:`, {
-        oldest: newRecords.length > 0 ? newRecords[newRecords.length - 1]?.date : 'none',
-        newest: newRecords.length > 0 ? newRecords[0]?.date : 'none',
-        totalCompleted: newRecords.filter(r => r.completed).length
-      });
       
       if (newRecords.length > 0) {
         console.log(`📊 [RecordsContext] Sample record:`, {
@@ -56,44 +52,30 @@ export const FirebaseRecordsProvider: React.FC<{ children: React.ReactNode }> = 
       setError(null);
       setSyncStatus('synced');
       
-      // Force re-render of dependent components with delay for UI consistency
       setTimeout(() => {
         console.log(`✅ [RecordsContext] Records propagated to components - Total: ${newRecords.length}`);
       }, 100);
     });
 
     return () => {
-      console.log(`🔥 [RecordsContext] Cleaning up listener for user ${user.uid}`);
-      unsubscribe();
+      console.log(`🔥 [RecordsContext] Cleaning up listener for user ${user.id}`);
+      subscription?.unsubscribe();
     };
   }, [user]);
 
-  const createRecord = async (recordData: Omit<DailyRecord, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
+  const createRecord = async (recordData: Omit<DailyRecord, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     if (!user) throw new Error('No authenticated user');
     
     try {
       setSyncStatus('syncing');
-      console.log(`📝 [RecordsContext] Creating record for ${recordData.date}:`, {
-        date: recordData.date,
-        capsules: recordData.capsules,
-        completed: recordData.completed,
-        time: recordData.time
-      });
+      console.log(`📝 [RecordsContext] Creating record for ${recordData.date}`);
       
-      await FirebaseService.createDailyRecord({
+      await SupabaseService.createDailyRecord({
         ...recordData,
-        userId: user.uid,
+        user_id: user.id,
       });
       
       console.log(`✅ [RecordsContext] Record created successfully for ${recordData.date}`);
-      console.log(`📊 [RecordsContext] Record details:`, {
-        date: recordData.date,
-        capsules: recordData.capsules,
-        completed: recordData.completed,
-        time: recordData.time,
-        userId: user.uid
-      });
-      // Success feedback will be handled by the calling component
     } catch (error) {
       setSyncStatus('error');
       console.error('❌ [RecordsContext] Error creating record:', error);
@@ -104,20 +86,12 @@ export const FirebaseRecordsProvider: React.FC<{ children: React.ReactNode }> = 
   const updateRecord = async (recordId: string, updates: Partial<DailyRecord>) => {
     try {
       setSyncStatus('syncing');
-      console.log(`📝 [RecordsContext] Updating record ${recordId}:`, {
-        updates,
-        recordId
-      });
+      console.log(`📝 [RecordsContext] Updating record ${recordId}`);
       
-      await FirebaseService.updateDailyRecord(recordId, updates);
+      await SupabaseService.updateDailyRecord(recordId, updates);
       
       console.log(`✅ [RecordsContext] Record updated successfully: ${recordId}`);
       setSyncStatus('synced');
-      
-      // Force immediate refresh
-      setTimeout(() => {
-        console.log(`🔄 [RecordsContext] Forcing refresh after update`);
-      }, 500);
     } catch (error) {
       setSyncStatus('error');
       console.error('❌ [RecordsContext] Error updating record:', error);
@@ -130,7 +104,7 @@ export const FirebaseRecordsProvider: React.FC<{ children: React.ReactNode }> = 
       setSyncStatus('syncing');
       console.log(`🗑️ [RecordsContext] Deleting record ${recordId}`);
       
-      await FirebaseService.deleteDailyRecord(recordId);
+      await SupabaseService.deleteDailyRecord(recordId);
       
       console.log(`✅ [RecordsContext] Record deleted successfully`);
       setSyncStatus('synced');
@@ -145,31 +119,23 @@ export const FirebaseRecordsProvider: React.FC<{ children: React.ReactNode }> = 
     if (!user) return null;
     
     try {
-      console.log(`🔍 [RecordsContext] Searching record for ${date} in ${records.length} loaded records`);
+      console.log(`🔍 [RecordsContext] Searching record for ${date}`);
       
       // First try to find in loaded records
       const existingRecord = records.find(r => r.date === date);
       if (existingRecord) {
-        console.log(`✅ [RecordsContext] Record found locally for ${date}:`, {
-          id: existingRecord.id,
-          completed: existingRecord.completed,
-          drops: existingRecord.drops
-        });
+        console.log(`✅ [RecordsContext] Record found locally for ${date}`);
         return existingRecord;
       }
       
-      // If not found, search in Firebase
-      const firebaseRecord = await FirebaseService.getDailyRecordByDate(user.uid, date);
-      if (firebaseRecord) {
-        console.log(`✅ [RecordsContext] Record found in Firebase for ${date}:`, {
-          id: firebaseRecord.id,
-          completed: firebaseRecord.completed,
-          drops: firebaseRecord.drops
-        });
+      // If not found, search in Supabase
+      const supabaseRecord = await SupabaseService.getDailyRecordByDate(user.id, date);
+      if (supabaseRecord) {
+        console.log(`✅ [RecordsContext] Record found in Supabase for ${date}`);
       } else {
-        console.log(`ℹ️ [RecordsContext] No record found in Firebase for ${date}`);
+        console.log(`ℹ️ [RecordsContext] No record found in Supabase for ${date}`);
       }
-      return firebaseRecord;
+      return supabaseRecord;
     } catch (error) {
       console.error('❌ [RecordsContext] Error getting record by date:', error);
       return null;
@@ -183,11 +149,7 @@ export const FirebaseRecordsProvider: React.FC<{ children: React.ReactNode }> = 
       setLoading(true);
       console.log(`🔄 [RecordsContext] Manually refreshing records`);
       
-      // Buscar records sem limit para refresh completo
-      const freshRecords = await FirebaseService.getDailyRecords(user.uid);
-      
-      // Ordenar localmente se necessário (backup)
-      freshRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const freshRecords = await SupabaseService.getDailyRecords(user.id);
       
       setRecords(freshRecords);
       setError(null);

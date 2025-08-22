@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
-import { FirebaseService } from '@/services/FirebaseService';
+import { SupabaseService } from '@/services/SupabaseService';
 import { Card } from '@/components/ui/Card';
 import { Header } from '@/components/ui/Header';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -43,15 +43,15 @@ export default function ProfileScreen() {
     try {
       if (user) {
         // Get user creation date from Firebase Auth
-        const creationTime = user.metadata.creationTime;
+        const creationTime = user.created_at;
         if (creationTime) {
           const firstDate = new Date(creationTime).toLocaleDateString();
           setFirstLoginDate(firstDate);
         } else {
           // Fallback: try to get from user profile or use current date
-          const profile = await FirebaseService.getUserProfile(user.uid);
-          if (profile?.createdAt) {
-            const firstDate = new Date(profile.createdAt).toLocaleDateString();
+          const profile = await SupabaseService.getUserProfile(user.id);
+          if (profile?.created_at) {
+            const firstDate = new Date(profile.created_at).toLocaleDateString();
             setFirstLoginDate(firstDate);
           } else {
             // Last fallback: use current date
@@ -128,13 +128,13 @@ export default function ProfileScreen() {
         try {
           // Upload to Firebase Storage
           console.log('📸 [Profile] Uploading to Firebase Storage...');
-          const downloadURL = await FirebaseService.uploadProfileImage(user!.uid, imageUri);
+          const downloadURL = await SupabaseService.uploadProfileImage(user!.id, imageUri);
           console.log(`✅ [Profile] Image uploaded successfully: ${downloadURL}`);
           
           // Update temp profile with Firebase URL
           if (tempProfile) {
             console.log('📸 [Profile] Updating temp profile with new image URL');
-            setTempProfile({ ...tempProfile, profileImageUrl: downloadURL });
+            setTempProfile({ ...tempProfile, profile_image_url: downloadURL });
           }
           
           Alert.alert(t('success'), t('imageUploadedSuccess'));
@@ -188,13 +188,13 @@ export default function ProfileScreen() {
         try {
           // Upload to Firebase Storage
           console.log('📷 [Profile] Uploading to Firebase Storage...');
-          const downloadURL = await FirebaseService.uploadProfileImage(user!.uid, imageUri);
+          const downloadURL = await SupabaseService.uploadProfileImage(user!.id, imageUri);
           console.log(`✅ [Profile] Photo uploaded successfully: ${downloadURL}`);
           
           // Update temp profile with Firebase URL
           if (tempProfile) {
             console.log('📷 [Profile] Updating temp profile with new image URL');
-            setTempProfile({ ...tempProfile, profileImageUrl: downloadURL });
+            setTempProfile({ ...tempProfile, profile_image_url: downloadURL });
           }
           
           Alert.alert(t('success'), t('imageUploadedSuccess'));
@@ -375,9 +375,9 @@ export default function ProfileScreen() {
           <Card style={{ marginHorizontal: 20, marginBottom: 20 }} padding={24}>
             <View style={styles.avatarContainer}>
               <View style={[styles.avatar, { backgroundColor: theme.colors.background }]}>
-                {(isEditing ? tempProfile?.profileImageUrl : profile?.profileImageUrl) ? (
+                {(isEditing ? tempProfile?.profile_image_url : profile?.profile_image_url) ? (
                   <Image
-                    source={{ uri: isEditing ? tempProfile?.profileImageUrl : profile?.profileImageUrl }}
+                    source={{ uri: isEditing ? tempProfile?.profile_image_url : profile?.profile_image_url }}
                     style={styles.avatarImage}
                   />
                 ) : (
@@ -465,7 +465,7 @@ export default function ProfileScreen() {
             <ProfileField
               icon={Calendar}
               label={t('treatmentStartDate')}
-              value={firstLoginDate || tempProfile?.treatmentStartDate || ''}
+              value={firstLoginDate || tempProfile?.treatment_start_date || ''}
               onChangeText={() => {}} // Read-only field
               placeholder={firstLoginDate ? firstLoginDate : (language === 'en' ? "Loading..." : "Carregando...")}
               readOnly={true}

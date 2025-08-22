@@ -1,5 +1,4 @@
-import { sendPasswordResetEmail, confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
-import { auth } from '@/config/firebase';
+import { supabase } from '@/config/supabase';
 
 export interface PasswordResetResult {
   success: boolean;
@@ -14,10 +13,11 @@ export class PasswordRecoveryService {
     try {
       console.log(`🔐 [PasswordRecovery] Sending password reset email to: ${email}`);
       
-      await sendPasswordResetEmail(auth, email, {
-        url: window.location.origin + '/auth/login', // URL de retorno após reset
-        handleCodeInApp: false, // Usar página web padrão do Firebase
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/login`,
       });
+
+      if (error) throw error;
       
       console.log(`✅ [PasswordRecovery] Password reset email sent successfully to: ${email}`);
       
@@ -27,49 +27,6 @@ export class PasswordRecoveryService {
       };
     } catch (error: any) {
       console.error('❌ [PasswordRecovery] Error sending password reset email:', error);
-      
-      // Log do erro específico para debugging
-      console.error(`❌ [PasswordRecovery] Firebase error code: ${error.code}`);
-      console.error(`❌ [PasswordRecovery] Firebase error message: ${error.message}`);
-      
-      throw error; // Re-throw para o componente tratar
-    }
-  }
-
-  /**
-   * Verifica se o código de reset é válido
-   */
-  static async verifyPasswordResetCode(code: string): Promise<string> {
-    try {
-      console.log(`🔍 [PasswordRecovery] Verifying password reset code`);
-      
-      const email = await verifyPasswordResetCode(auth, code);
-      
-      console.log(`✅ [PasswordRecovery] Password reset code verified for email: ${email}`);
-      return email;
-    } catch (error: any) {
-      console.error('❌ [PasswordRecovery] Error verifying password reset code:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Confirma o reset de senha com nova senha
-   */
-  static async confirmPasswordReset(code: string, newPassword: string): Promise<PasswordResetResult> {
-    try {
-      console.log(`🔐 [PasswordRecovery] Confirming password reset`);
-      
-      await confirmPasswordReset(auth, code, newPassword);
-      
-      console.log(`✅ [PasswordRecovery] Password reset confirmed successfully`);
-      
-      return {
-        success: true,
-        message: 'Password reset successfully'
-      };
-    } catch (error: any) {
-      console.error('❌ [PasswordRecovery] Error confirming password reset:', error);
       throw error;
     }
   }
@@ -141,7 +98,6 @@ export class PasswordRecoveryService {
   static generatePasswordSuggestions(): string[] {
     const adjectives = ['Quick', 'Bright', 'Swift', 'Smart', 'Bold', 'Calm'];
     const nouns = ['Tiger', 'Eagle', 'River', 'Mountain', 'Ocean', 'Forest'];
-    const numbers = Math.floor(Math.random() * 999) + 100;
     const symbols = ['!', '@', '#', '$', '%'];
     
     const suggestions: string[] = [];
@@ -159,39 +115,37 @@ export class PasswordRecoveryService {
   }
 
   /**
-   * Verifica se email existe no sistema (para UX melhor)
+   * Verifica se email existe no sistema
    */
   static async checkEmailExists(email: string): Promise<boolean> {
     try {
-      // Tentar enviar email de reset - se não der erro, email existe
-      await sendPasswordResetEmail(auth, email);
+      // Try to send reset email - if no error, email exists
+      await this.sendPasswordResetEmail(email);
       return true;
     } catch (error: any) {
-      if (error.code === 'auth/user-not-found') {
+      if (error.message?.includes('User not found')) {
         return false;
       }
-      // Para outros erros, assumir que email existe
+      // For other errors, assume email exists
       return true;
     }
   }
 
   /**
-   * Limpa cache de autenticação (útil após reset de senha)
+   * Limpa cache de autenticação
    */
   static async clearAuthCache(): Promise<void> {
     try {
       console.log('🧹 [PasswordRecovery] Clearing auth cache');
       
-      // Limpar localStorage relacionado ao Firebase
       if (typeof window !== 'undefined') {
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
-          if (key.startsWith('firebase:') || key.startsWith('firebaseui::')) {
+          if (key.startsWith('supabase.') || key.startsWith('sb-')) {
             localStorage.removeItem(key);
           }
         });
         
-        // Limpar sessionStorage também
         sessionStorage.clear();
       }
       
@@ -202,29 +156,31 @@ export class PasswordRecoveryService {
   }
 
   /**
-   * Formata mensagens de erro do Firebase para o usuário
+   * Formata mensagens de erro do Supabase para o usuário
    */
-  static formatFirebaseError(error: any): string {
-    switch (error.code) {
-      case 'auth/user-not-found':
-        return 'No account found with this email address.';
-      case 'auth/invalid-email':
-        return 'Please enter a valid email address.';
-      case 'auth/too-many-requests':
-        return 'Too many password reset attempts. Please try again later.';
-      case 'auth/network-request-failed':
-        return 'Network error. Please check your internet connection.';
-      case 'auth/weak-password':
-        return 'Password is too weak. Please choose a stronger password.';
-      case 'auth/expired-action-code':
-        return 'Password reset link has expired. Please request a new one.';
-      case 'auth/invalid-action-code':
-        return 'Invalid or expired password reset link.';
-      case 'auth/user-disabled':
-        return 'This account has been disabled. Please contact support.';
-      default:
-        return 'An error occurred. Please try again.';
+  static formatSupabaseError(error: any): string {
+    const message = error.message?.toLowerCase() || '';
+    
+    if (message.includes('user not found')) {
+      return 'No account found with this email address.';
     }
+    if (message.includes('invalid email')) {
+      return 'Please enter a valid email address.';
+    }
+    if (message.includes('too many requests')) {
+      return 'Too many password reset attempts. Please try again later.';
+    }
+    if (message.includes('network')) {
+      return 'Network error. Please check your internet connection.';
+    }
+    if (message.includes('weak password')) {
+      return 'Password is too weak. Please choose a stronger password.';
+    }
+    if (message.includes('email already registered')) {
+      return 'This email is already registered. Please use a different email or try logging in.';
+    }
+    
+    return 'An error occurred. Please try again.';
   }
 
   /**
@@ -237,12 +193,8 @@ export class PasswordRecoveryService {
       success,
       errorCode,
       userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'unknown',
-      ip: 'client-side', // Em produção, isso seria capturado no backend
     };
 
     console.log(`📊 [PasswordRecovery] Audit log:`, logData);
-    
-    // Em produção, você enviaria isso para um serviço de analytics
-    // Analytics.track('password_recovery_attempt', logData);
   }
 }

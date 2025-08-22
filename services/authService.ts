@@ -1,6 +1,5 @@
-// Serviço de autenticação responsável pela persistência de dados
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FirebaseService } from './FirebaseService';
+import { SupabaseService } from './SupabaseService';
 
 export interface AuthUser {
   uid: string;
@@ -56,8 +55,8 @@ export class AuthService {
     try {
       console.log('🚪 [AuthService] Starting logout process...');
       
-      // Logout do Firebase primeiro
-      await FirebaseService.logoutUser();
+      // Logout do Supabase primeiro
+      await SupabaseService.logoutUser();
       
       // Remover dados locais
       await AsyncStorage.multiRemove([
@@ -74,10 +73,10 @@ export class AuthService {
           localStorage.removeItem('logout');
         }, 1000);
         
-        // Limpar dados do Firebase do localStorage também
+        // Limpar dados do Supabase do localStorage também
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
-          if (key.startsWith('firebase:') || key.startsWith('firebaseui::')) {
+          if (key.startsWith('supabase.') || key.startsWith('sb-')) {
             localStorage.removeItem(key);
           }
         });
@@ -98,10 +97,9 @@ export class AuthService {
         
         // Force logout event even on error
         if (typeof window !== 'undefined') {
-          // Clear Firebase data from localStorage even on error
           const keys = Object.keys(localStorage);
           keys.forEach(key => {
-            if (key.startsWith('firebase:') || key.startsWith('firebaseui::')) {
+            if (key.startsWith('supabase.') || key.startsWith('sb-')) {
               localStorage.removeItem(key);
             }
           });
@@ -129,7 +127,7 @@ export class AuthService {
   }
 
   /**
-   * Limpa todos os dados da aplicação (para casos extremos)
+   * Limpa todos os dados da aplicação
    */
   static async clearAllData(): Promise<void> {
     try {
